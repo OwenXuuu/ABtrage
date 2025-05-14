@@ -12,8 +12,13 @@ DEFAULT_AUD_USDT = 0.65 # Adjusted based on typical ranges, original was 0.55
 DEFAULT_USDT_CNY = 7.2  # Adjusted based on typical ranges, original was 7.0
 DEFAULT_AUD_CNY = 4.7   # Adjusted based on typical ranges, original was 4.8
 
-# --- 获取实时汇率的函数 ---
-def fetch_realtime_rates():
+# --- 缓存设置 ---
+CACHE_TTL_SECONDS = 10 * 60  # 缓存10分钟
+
+# --- 获取实时汇率的函数 (带缓存) ---
+@st.cache_data(ttl=CACHE_TTL_SECONDS)
+def fetch_realtime_rates_cached():
+    st.write("正在尝试从API获取最新汇率... (结果将被缓存)") # 临时消息，指示正在调用API
     rates = {
         'aud_usdt': DEFAULT_AUD_USDT,
         'usdt_cny': DEFAULT_USDT_CNY,
@@ -21,10 +26,11 @@ def fetch_realtime_rates():
     }
     fetched_any_successful = False
     errors = []
+    api_timeout = 15 # API请求超时时间增加到15秒
 
     # 1. AUD/CNY from Frankfurter
     try:
-        response = requests.get("https://api.frankfurter.app/latest?from=AUD&to=CNY", timeout=5)
+        response = requests.get("https://api.frankfurter.app/latest?from=AUD&to=CNY", timeout=api_timeout)
         response.raise_for_status()
         data = response.json()
         if 'rates' in data and 'CNY' in data['rates']:
@@ -37,10 +43,9 @@ def fetch_realtime_rates():
     except ValueError:
         errors.append("Invalid JSON response or rate format for AUD/CNY from Frankfurter.")
 
-
     # 2. USDT/CNY from CoinGecko
     try:
-        response = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=cny", timeout=5)
+        response = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=cny", timeout=api_timeout)
         response.raise_for_status()
         data = response.json()
         if 'tether' in data and 'cny' in data['tether']:
@@ -55,7 +60,7 @@ def fetch_realtime_rates():
 
     # 3. AUD/USDT from CoinGecko (fetch USDT_AUD then invert)
     try:
-        response = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=aud", timeout=5)
+        response = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=aud", timeout=api_timeout)
         response.raise_for_status()
         data = response.json()
         if 'tether' in data and 'aud' in data['tether'] and data['tether']['aud'] != 0:
@@ -75,12 +80,12 @@ def fetch_realtime_rates():
         
     return rates, fetched_any_successful, errors
 
-# --- 获取初始汇率 ---
-fetched_rates, rates_successfully_fetched_any, fetch_errors = fetch_realtime_rates()
+# --- 获取初始汇率 (调用缓存函数) ---
+fetched_rates, rates_successfully_fetched_any, fetch_errors = fetch_realtime_rates_cached()
 
 # --- 显示获取状态 ---
 if rates_successfully_fetched_any and not fetch_errors:
-    st.success("✓ 实时汇率已成功加载！您仍然可以手动调整以下数值。")
+    st.success("✓ 实时汇率已处理！数据来自缓存或API。您仍然可以手动调整以下数值。")
 elif rates_successfully_fetched_any and fetch_errors:
     st.info("部分实时汇率已加载。对于其他汇率，已使用默认值。您可手动调整。")
     for error in fetch_errors:
