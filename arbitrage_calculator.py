@@ -1,11 +1,11 @@
 import streamlit as st
 import requests
+from datetime import datetime # 新增导入
 
 # 设置页面标题
-# st.title('三角套利收益计算器 (AUD → USDT → CNY)') # 原标题被注释掉
-st.markdown("<h1 style='text-align: center;'>三角套利收益计算器</h1>", unsafe_allow_html=True)
-st.markdown("<h3 style='text-align: center;'>(AUD → USDT → CNY)</h3>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; font-style: italic;'>by LOSTGE</p>", unsafe_allow_html=True) # 新增署名
+st.markdown("<h1 style='text-align: center; margin-bottom: 0.2em;'>三角套利收益计算器</h1>", unsafe_allow_html=True)
+st.markdown("<h3 style='text-align: center; margin-top: 0.1em; margin-bottom: 0.2em; padding-left: 0.8em;'>(AUD → USDT → CNY)</h3>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; font-style: italic; margin-top: 0.1em;'>by LOSTGE</p>", unsafe_allow_html=True)
 
 # --- 默认回退汇率 ---
 DEFAULT_AUD_USDT = 0.65 # Adjusted based on typical ranges, original was 0.55
@@ -18,7 +18,6 @@ CACHE_TTL_SECONDS = 10 * 60  # 缓存10分钟
 # --- 获取实时汇率的函数 (带缓存) ---
 @st.cache_data(ttl=CACHE_TTL_SECONDS)
 def fetch_realtime_rates_cached():
-    st.write("正在尝试从API获取最新汇率... (结果将被缓存)") # 临时消息，指示正在调用API
     rates = {
         'aud_usdt': DEFAULT_AUD_USDT,
         'usdt_cny': DEFAULT_USDT_CNY,
@@ -27,6 +26,7 @@ def fetch_realtime_rates_cached():
     fetched_any_successful = False
     errors = []
     api_timeout = 15 # API请求超时时间增加到15秒
+    current_fetch_time = datetime.now() # 获取当前时间
 
     # 1. AUD/CNY from Frankfurter
     try:
@@ -78,16 +78,17 @@ def fetch_realtime_rates_cached():
     except ZeroDivisionError:
         errors.append("Error calculating AUD/USDT: USDT/AUD rate was zero.")
         
-    return rates, fetched_any_successful, errors
+    return rates, fetched_any_successful, errors, current_fetch_time
 
 # --- 获取初始汇率 (调用缓存函数) ---
-fetched_rates, rates_successfully_fetched_any, fetch_errors = fetch_realtime_rates_cached()
+with st.spinner("正在获取最新汇率..."): # 使用 spinner
+    fetched_rates, rates_successfully_fetched_any, fetch_errors, last_update_time = fetch_realtime_rates_cached()
 
 # --- 显示获取状态 ---
 if rates_successfully_fetched_any and not fetch_errors:
-    st.success("✓ 实时汇率已处理！数据来自缓存或API。您仍然可以手动调整以下数值。")
+    st.success(f"✓ 汇率数据已处理！(数据更新于: {last_update_time.strftime('%Y-%m-%d %H:%M:%S')}) 您仍可手动调整。")
 elif rates_successfully_fetched_any and fetch_errors:
-    st.info("部分实时汇率已加载。对于其他汇率，已使用默认值。您可手动调整。")
+    st.info(f"部分汇率已加载 (数据更新于: {last_update_time.strftime('%Y-%m-%d %H:%M:%S')})。其他使用默认值。您可手动调整。")
     for error in fetch_errors:
         st.warning(f"加载问题: {error}")
 else: 
